@@ -7,7 +7,7 @@ import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 
 import java.io.File;
-import java.util.ArrayList;
+import java.util.*;
 
 public class FileTreeView extends TreeView<String> {
     private final File root;
@@ -16,13 +16,10 @@ public class FileTreeView extends TreeView<String> {
         super(new FileTreeItem(root, expandRoot));
         this.root = root;
         getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-
-
+        setCellFactory(new DragCellFactory());
     }
 
-
-
-    private static class FileTreeItem extends TreeItem<String> {
+    public static class FileTreeItem extends TreeItem<String> {
         // We cache whether the File is a leaf or not. A File is a leaf if
         // it is not a directory and does not have any files contained within
         // it. We cache this as isLeaf() is called often, and doing the
@@ -40,6 +37,10 @@ public class FileTreeView extends TreeView<String> {
 
 
         private final File file;
+
+        public File getFile() {
+            return file;
+        }
 
         public FileTreeItem(File file, boolean expandRoot) {
             super(file.getName());
@@ -69,7 +70,7 @@ public class FileTreeView extends TreeView<String> {
                 items.add(new FileTreeItem(child, false));
             }
 
-            return new ObservableListWrapper<TreeItem<String>>(items);
+            return new ObservableListWrapper<>(items);
         }
 
 
@@ -80,6 +81,19 @@ public class FileTreeView extends TreeView<String> {
             }
 
             return isLeaf;
+        }
+
+        public void update() {
+            String[] listFiles = file.list();
+            if (listFiles != null) {
+                Set<String> files = new HashSet<>(Arrays.asList(listFiles));
+                for (Iterator<TreeItem<String>> iterator = getChildren().iterator(); iterator.hasNext(); ) {
+                    TreeItem<String> item = iterator.next();
+                    if (!files.contains(item.getValue())) {
+                        iterator.remove();
+                    }
+                }
+            }
         }
     }
 }
