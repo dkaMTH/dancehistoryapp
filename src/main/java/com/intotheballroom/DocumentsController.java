@@ -14,7 +14,7 @@ public class DocumentsController {
     private final File unsortedRoot;
     private ObservableList<String> years;
     private Map<String, ObservableList<String>> yearSourceMap;
-    private Map<String, Map<String, ObservableList<String>>> sourceFileMap;
+    private Map<String, Map<String, ObservableList<FileDescription>>> sourceFileMap;
 
     public DocumentsController(File sortedRoot, File unsortedRoot) {
         this.sortedRoot = sortedRoot;
@@ -64,8 +64,8 @@ public class DocumentsController {
         return sources;
     }
 
-    public ObservableList<String> getSourceFiles(String year, String source) {
-        final Map<String, ObservableList<String>> sources;
+    public ObservableList<FileDescription> getSourceFiles(String year, String source) {
+        final Map<String, ObservableList<FileDescription>> sources;
 
         if (sourceFileMap.containsKey(year)) {
             sources = sourceFileMap.get(year);
@@ -74,16 +74,19 @@ public class DocumentsController {
             sourceFileMap.put(year, sources);
         }
 
-        ObservableList<String> result;
+        ObservableList<FileDescription> result;
         if (sources.containsKey(source)) {
             result = sources.get(source);
         } else {
-            String[] list = new File(sortedRoot, year + "/" + source).list();
+            String[] list = new File(sortedRoot, year + File.separator + source).list();
             if (list == null) {
                 System.err.printf("Failed to retrieve files from source [%s] and year [%s]%n", source, year);
             }
-            result = new ObservableListWrapper<>(
-                    new ArrayList<>(Arrays.asList(list)));
+            ArrayList<FileDescription> descriptions = new ArrayList<>();
+            for (String fileName : list) {
+                descriptions.add(new FileDescription(fileName));
+            }
+            result = new ObservableListWrapper<>(descriptions);
             sources.put(source, result);
         }
 
@@ -92,11 +95,29 @@ public class DocumentsController {
 
 
     public void addFilesToSource(String source, String year, ArrayList<File> files) {
-        ObservableList<String> sourceFiles = getSourceFiles(year, source);
+        ObservableList<FileDescription> sourceFiles = getSourceFiles(year, source);
         for (File file : files) {
-            if (file.renameTo(new File(sortedRoot, year + "/" + source + "/" + file.getName()))) {
-                sourceFiles.add(file.getName());
+            if (file.renameTo(new File(sortedRoot, year + File.separator + source + File.separator + file.getName()))) {
+                sourceFiles.add(new FileDescription(file.getName()));
             }
         }
+    }
+
+    public File getFile(String year, String source, String fileName) {
+        return new File(sortedRoot, year + File.separator + source + File.separator + fileName);
+    }
+
+
+    public void setFileProperty(String year, String source, String fileName, FilePropertyType type, String value) {
+        getFileDescription(year, source, fileName).setProperty(type, value);
+    }
+
+    public FileDescription getFileDescription(String year, String source, String fileName) {
+        ObservableList<FileDescription> sourceFiles = getSourceFiles(year, source);
+        for (FileDescription sourceFile : sourceFiles) {
+            if (sourceFile.getName().equals(fileName))
+                return sourceFile;
+        }
+        throw new IllegalStateException(String.format("Requested non existing file [%s] from year [%s] and source [%s]", year, source, fileName));
     }
 }

@@ -11,11 +11,13 @@ import javafx.scene.control.TreeItem;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
+import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 
 public class DanceApp extends Application {
     public static void main(String[] args) {
+        Toolkit.getDefaultToolkit();
         launch(args);
     }
 

@@ -1,12 +1,11 @@
 package com.intotheballroom;
 
-import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
-import javafx.scene.control.*;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
@@ -17,12 +16,13 @@ public class SourcePane extends VBox {
 
     private final Label sourceName;
     private final SourceFileListView fileList;
+    private final FilePropertiesPane filePropertiesPane;
 
 
     public SourcePane(DocumentsController controller) {
         ObservableList<Node> children = getChildren();
 
-        GridPane sourceProperties = createGridPane();
+        GridPane sourceProperties = initGridPane(new GridPane());
         sourceProperties.add(new Label("Source:"), 0, 0);
         sourceName = new Label();
         sourceProperties.add(sourceName, 1, 0);
@@ -37,36 +37,15 @@ public class SourcePane extends VBox {
         VBox.setVgrow(fileList, Priority.ALWAYS);
         children.add(fileList);
 
-        GridPane fileProperties = createGridPane();
+        filePropertiesPane = new FilePropertiesPane(controller, fileList.getCheckedFiles());
+        GridPane fileProperties = initGridPane(filePropertiesPane);
         children.add(fileProperties);
-        fileProperties.add(new Label("Page name:"), 0, 0);
-        fileProperties.add(new TextField(), 1, 0);
-        fileProperties.add(new CheckBox("Rename file"), 2, 0);
-        fileProperties.add(new Label("Page author(s):"), 0, 1);
-        fileProperties.add(new TextField(), 1, 1);
-        fileProperties.add(new Label("Date"), 0, 2);
-        fileProperties.add(new HBox(10, createSmallField("Year"), createSmallField("Month"), createSmallField("Day")), 1, 2);
-        fileProperties.add(new Label("Comment:"), 0, 3);
-        TextArea commentArea = new TextArea();
-        commentArea.setPrefWidth(250);
-        fileProperties.add(commentArea, 1, 3);
-        fileProperties.add(new Label("Dances:"), 0, 4);
-        fileProperties.add(new HBox(10, new ComboBox<>(FXCollections.observableArrayList("Waltz", "Collegiate")),
-                new ComboBox<>(FXCollections.observableArrayList("Slow", "Hesitation")), new Button("Add")), 1, 4);
-        fileProperties.add(new Button("Apply changes"), 1, 5);
 
         setSource(null, null);
     }
 
-    private TextField createSmallField(String prompt) {
-        TextField result = new TextField();
-        result.setPrefWidth(50);
-        result.setPromptText(prompt);
-        return result;
-    }
 
-    private GridPane createGridPane() {
-        GridPane gridPane = new GridPane();
+    private GridPane initGridPane(GridPane gridPane) {
         gridPane.setHgap(10);
         gridPane.setVgap(10);
         gridPane.setPadding(new Insets(10, 10, 10, 10));
@@ -82,6 +61,7 @@ public class SourcePane extends VBox {
             sourceName.setText(source + " (" + year + ")");
         }
         fileList.setSource(year, source);
+        filePropertiesPane.setSource(year, source);
 
     }
 }

@@ -5,14 +5,20 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.scene.control.ListView;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.cell.CheckBoxListCell;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.util.Callback;
 
+import java.awt.*;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Created by Dasha on 5/17/2015.
@@ -23,13 +29,16 @@ public class SourceFileListView extends ListView<String> {
 
     private final Border defaultBorder;
     private final DocumentsController controller;
-    private final ListChangeListener<String> listener;
+    private final ListChangeListener<FileDescription> listener;
+    private final HashMap<String, SimpleBooleanProperty> checkBoxItems = new HashMap<>();
+    private final BatchObservableList<String> checkedFiles = new BatchObservableList<>(new ArrayList<>());
 
     public SourceFileListView(DocumentsController controller) {
+        getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         setCellFactory(CheckBoxListCell.forListView(new Callback<String, ObservableValue<Boolean>>() {
             @Override
             public ObservableValue<Boolean> call(String param) {
-                return new SimpleBooleanProperty();
+                return checkBoxItems.get(param);
             }
         }));
         this.controller = controller;
@@ -37,8 +46,9 @@ public class SourceFileListView extends ListView<String> {
 
         listener = c -> {
             while (c.next()) {
-                for (String fileName : c.getAddedSubList()) {
-                    getItems().add(fileName);
+                for (FileDescription description : c.getAddedSubList()) {
+                    getItems().add(description.getName());
+                    checkBoxItems.put(description.getName(), createCheckedItemSelectionProperty(description.getName()));
                 }
             }
         };
@@ -73,6 +83,51 @@ public class SourceFileListView extends ListView<String> {
                 controller.addFilesToSource(source, year, files);
             }
         });
+
+        setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.SPACE) {
+                event.consume();
+                ObservableList<String> selectedItems = getSelectionModel().getSelectedItems();
+                if (selectedItems.isEmpty()) {
+                    return;
+                }
+                boolean newValue = !checkBoxItems.get(selectedItems.get(0)).getValue();
+
+                checkedFiles.beginBatchChange();
+                for (String selectedItem : selectedItems) {
+                    checkBoxItems.get(selectedItem).setValue(newValue);
+                }
+                checkedFiles.endBatchChange();
+            }
+        });
+
+        setOnMouseClicked(event -> {
+            if (getSelectionModel().getSelectedItem() != null && event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
+                File file = controller.getFile(year, source, getSelectionModel().getSelectedItem());
+                try {
+                    Desktop.getDesktop().open(file);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            event.consume();
+        });
+    }
+
+    public ObservableList<String> getCheckedFiles() {
+        return checkedFiles;
+    }
+
+    private SimpleBooleanProperty createCheckedItemSelectionProperty(String fileName) {
+        SimpleBooleanProperty property = new SimpleBooleanProperty();
+        property.addListener((observable, oldValue, newValue) -> {
+            if (newValue) {
+                checkedFiles.add(fileName);
+            } else {
+                checkedFiles.remove(fileName);
+            }
+        });
+        return property;
     }
 
     private void addFile(File file, ArrayList<File> files) {
@@ -87,16 +142,22 @@ public class SourceFileListView extends ListView<String> {
 
     public void setSource(String year, String source) {
         getItems().clear();
+        checkBoxItems.clear();
+        checkedFiles.clear();
         if (this.year != null && this.source != null) {
-            ObservableList<String> oldSourceFiles = controller.getSourceFiles(this.year, this.source);
+            ObservableList<FileDescription> oldSourceFiles = controller.getSourceFiles(this.year, this.source);
             oldSourceFiles.removeListener(listener);
         }
         this.year = year;
         this.source = source;
         if (year != null && source != null) {
-            ObservableList<String> sourceFiles = controller.getSourceFiles(year, source);
+            ObservableList<FileDescription> sourceFiles = controller.getSourceFiles(year, source);
             sourceFiles.addListener(listener);
-            getItems().addAll(sourceFiles);
+            ObservableList<String> items = getItems();
+            for (FileDescription sourceFile : sourceFiles) {
+                items.add(sourceFile.getName());
+                checkBoxItems.put(sourceFile.getName(), createCheckedItemSelectionProperty(sourceFile.getName()));
+            }
         }
 
     }
