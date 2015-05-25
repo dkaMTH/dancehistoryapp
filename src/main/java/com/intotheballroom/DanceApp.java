@@ -39,7 +39,7 @@ public class DanceApp extends Application {
         sortedView.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<TreeItem<SortedItem>>() {
             @Override
             public void changed(ObservableValue<? extends TreeItem<SortedItem>> observable, TreeItem<SortedItem> oldValue, TreeItem<SortedItem> newValue) {
-                if (newValue.getValue().getType() == SortedItemType.SOURCE) {
+                if (newValue != null && newValue.getValue().getType() == SortedItemType.SOURCE) {
                     sourcePane.setSource(newValue.getParent().getValue().getName(), newValue.getValue().getName());
                 } else {
                     sourcePane.setSource(null, null);
