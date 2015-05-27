@@ -1,13 +1,9 @@
 package com.intotheballroom;
 
 import javafx.application.Application;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.geometry.Orientation;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.scene.control.SplitPane;
-import javafx.scene.control.TreeItem;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
@@ -36,14 +32,11 @@ public class DanceApp extends Application {
         SourcePane sourcePane = new SourcePane(controller);
         SortedTreeView sortedView = new SortedTreeView(controller);
         sortedView.setCellFactory(new SortedContextMenuCellFactory(controller));
-        sortedView.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<TreeItem<SortedItem>>() {
-            @Override
-            public void changed(ObservableValue<? extends TreeItem<SortedItem>> observable, TreeItem<SortedItem> oldValue, TreeItem<SortedItem> newValue) {
-                if (newValue != null && newValue.getValue().getType() == SortedItemType.SOURCE) {
-                    sourcePane.setSource(newValue.getParent().getValue().getName(), newValue.getValue().getName());
-                } else {
-                    sourcePane.setSource(null, null);
-                }
+        sortedView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue != null && newValue.getValue().getType() == SortedItemType.SOURCE) {
+                sourcePane.setSource(newValue.getParent().getValue().getName(), newValue.getValue().getName());
+            } else {
+                sourcePane.setSource(null, null);
             }
         });
         FileTreeView unsortedView = new FileTreeView(controller.getUnsortedRoot(), false);
@@ -55,7 +48,7 @@ public class DanceApp extends Application {
         middle.getChildren().add(sourcePane);
 
         StackPane right = new StackPane();
-        right.getChildren().add(new Button("Button Three"));
+        right.getChildren().add(new DancesTreeView(controller));
 
         root.getItems().addAll(left, middle, right);
         root.setDividerPositions(0.2f, 0.8f);

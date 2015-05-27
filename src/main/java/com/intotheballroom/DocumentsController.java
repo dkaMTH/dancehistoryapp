@@ -1,29 +1,97 @@
 package com.intotheballroom;
 
 import com.sun.javafx.collections.ObservableListWrapper;
+import com.sun.javafx.collections.ObservableMapWrapper;
 import javafx.collections.ObservableList;
+import javafx.collections.ObservableMap;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class DocumentsController {
     private final File sortedRoot;
     private final File unsortedRoot;
     private ObservableList<String> years;
+    private ObservableMap<String, DanceFamily> danceFamilies;
     private Map<String, ObservableList<String>> yearSourceMap;
     private Map<String, Map<String, ObservableList<FileDescription>>> sourceFileMap;
 
     public DocumentsController(File sortedRoot, File unsortedRoot) {
         this.sortedRoot = sortedRoot;
+        if (!sortedRoot.isDirectory() && !sortedRoot.mkdirs()) {
+            throw new IllegalStateException(String.format("Unable to create directory %s", sortedRoot.getAbsolutePath()));
+        }
 
-        years = new ObservableListWrapper<>(new ArrayList<>(Arrays.asList(sortedRoot.list())));
+        danceFamilies = new ObservableMapWrapper<>(loadTree(new File(sortedRoot, "dances.xml")));
+        //noinspection ConstantConditions
+        years = new ObservableListWrapper<>(new ArrayList<>(
+                Arrays.stream(sortedRoot.listFiles()).filter(File::isDirectory).map(File::getName).collect(Collectors.toList())));
         yearSourceMap = new HashMap<>();
         sourceFileMap = new HashMap<>();
 
         this.unsortedRoot = unsortedRoot;
+    }
+
+    private Map<String, DanceFamily> loadTree(File file) {
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        Map<String, DanceFamily> result = new HashMap<>();
+        try {
+            DocumentBuilder documentBuilder = dbf.newDocumentBuilder();
+            Document document = documentBuilder.parse(file);
+            NodeList familyNodes = document.getDocumentElement().getChildNodes();
+            int familyNodesLength = familyNodes.getLength();
+            for (int i = 0; i < familyNodesLength; i++) {
+                Node familyNode = familyNodes.item(i);
+                if (familyNode.getNodeType() == Node.ELEMENT_NODE && familyNode.getNodeName().equals("family")) {
+                    Node familyNameNode = familyNode.getAttributes().getNamedItem("name");
+                    if (familyNameNode == null)
+                        continue;
+                    String familyName = familyNameNode.getNodeValue();
+                    if (familyName == null)
+                        continue;
+                    DanceFamily danceFamily = new DanceFamily(familyName);
+                    result.put(familyName, danceFamily);
+                    NodeList styleNodes = familyNode.getChildNodes();
+                    int styleNodesLength = styleNodes.getLength();
+                    for (int j = 0; j < styleNodesLength; j++) {
+                        Node styleNode = styleNodes.item(j);
+                        if (styleNode.getNodeType() == Node.ELEMENT_NODE && styleNode.getNodeName().equals("style")) {
+                            Node styleNameNode = styleNode.getAttributes().getNamedItem("name");
+                            if (styleNameNode == null) {
+                                continue;
+                            }
+                            String styleName = styleNameNode.getNodeValue();
+                            if (styleName == null)
+                                continue;
+                            danceFamily.getStyles().add(styleName);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
     }
 
     public boolean createYear(String name) {
@@ -81,6 +149,7 @@ public class DocumentsController {
             String[] list = new File(sortedRoot, year + File.separator + source).list();
             if (list == null) {
                 System.err.printf("Failed to retrieve files from source [%s] and year [%s]%n", source, year);
+                return null;
             }
             ArrayList<FileDescription> descriptions = new ArrayList<>();
             for (String fileName : list) {
@@ -119,5 +188,63 @@ public class DocumentsController {
                 return sourceFile;
         }
         throw new IllegalStateException(String.format("Requested non existing file [%s] from year [%s] and source [%s]", year, source, fileName));
+    }
+
+    public ObservableMap<String, DanceFamily> getDanceFamilies() {
+        return danceFamilies;
+    }
+
+    public boolean saveSource(String year, String source) {
+        ObservableList<FileDescription> sourceFiles = getSourceFiles(year, source);
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        try {
+            Document document = dbf.newDocumentBuilder().newDocument();
+            Element files = document.createElement("files");
+            document.appendChild(files);
+            for (FileDescription sourceFile : sourceFiles) {
+                if (sourceFile.getAvailableProperties().isEmpty())
+                    continue;
+                Element file = document.createElement("file");
+                file.setAttribute("name", sourceFile.getName());
+                for (FilePropertyType propertyType : sourceFile.getAvailableProperties()) {
+                    Element property = document.createElement("property");
+                    property.setAttribute("type", propertyType.name().toLowerCase());
+                    property.setTextContent(sourceFile.getProperty(propertyType));
+                    file.appendChild(property);
+                }
+                files.appendChild(file);
+            }
+
+
+            // Use a Transformer for output
+            TransformerFactory tFactory =
+                    TransformerFactory.newInstance();
+            Transformer transformer =
+                    tFactory.newTransformer();
+
+            DOMSource domSource = new DOMSource(document);
+            try (FileOutputStream outputStream = new FileOutputStream(new File(
+                    sortedRoot, year + File.separator + source + File.separator + "description.xml"))) {
+                StreamResult result = new StreamResult(outputStream);
+                transformer.transform(domSource, result);
+            }
+
+        } catch (ParserConfigurationException e) {
+            e.printStackTrace();
+            return false;
+        } catch (TransformerConfigurationException e) {
+            e.printStackTrace();
+            return false;
+        } catch (TransformerException e) {
+            e.printStackTrace();
+            return false;
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+        return true;
     }
 }

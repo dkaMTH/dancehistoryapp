@@ -1,17 +1,17 @@
 package com.intotheballroom;
 
+import javafx.beans.value.ObservableValue;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
+import javafx.collections.ObservableMap;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 
-import java.util.EnumMap;
-import java.util.EnumSet;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Created by Dasha on 5/23/2015.
@@ -21,19 +21,22 @@ public class FilePropertiesPane extends GridPane {
     private final Map<FilePropertyType, Boolean> modifiedProperties = new EnumMap<>(FilePropertyType.class);
     private final Map<FilePropertyType, TextInputControl> propertyEditors = new EnumMap<>(FilePropertyType.class);
     private final EnumMap<FilePropertyType, String> commonValues = new EnumMap<>(FilePropertyType.class);
+    private final DocumentsController controller;
 
     private boolean updatingText;
 
     private String year;
     private String source;
+    private final TextField danceField;
+    private boolean danceFieldValid = true;
 
     public FilePropertiesPane(DocumentsController controller, ObservableList<String> checkedFiles) {
+        this.controller = controller;
         this.add(new Label("Page name:"), 0, 0);
         TextField pageName = new TextField();
         this.add(pageName, 1, 0);
         propertyEditors.put(FilePropertyType.PAGENAME, pageName);
 
-        this.add(new CheckBox("Rename file"), 2, 0); //TODO: Move, maybe
 
         this.add(new Label("Page author(s):"), 0, 1);
         TextField pageAuthors = new TextField();
@@ -51,14 +54,15 @@ public class FilePropertiesPane extends GridPane {
 
         this.add(new Label("Comment:"), 0, 3);
         TextArea commentArea = new TextArea();
-        commentArea.setPrefWidth(250);
+        commentArea.setPrefWidth(300);
         this.add(commentArea, 1, 3);
         propertyEditors.put(FilePropertyType.COMMENT, commentArea);
 
         this.add(new Label("Dances:"), 0, 4);
-        TextField danceField = new TextField();
+        danceField = new TextField();
         this.add(danceField, 1, 4);
         propertyEditors.put(FilePropertyType.DANCES, danceField);
+        danceField.textProperty().addListener(this::validateDanceField);
 
 
         for (Map.Entry<FilePropertyType, TextInputControl> entry : propertyEditors.entrySet()) {
@@ -79,6 +83,24 @@ public class FilePropertiesPane extends GridPane {
         Button applyChanges = new Button("Apply changes");
 
         applyChanges.setOnAction(event -> {
+            if (isModified(FilePropertyType.DANCES)) {
+                ArrayList<String> matchedDances = new ArrayList<>();
+                String[] patterns = danceField.getText().split(",");
+                for (String pattern : patterns) {
+                    if (!pattern.trim().isEmpty()) {
+                        ArrayList<String> matchingDances = getMatchingDances(pattern);
+                        if (matchingDances.size() != 1) {
+                            return;
+                        }
+                        matchedDances.addAll(matchingDances);
+                    }
+                }
+                Collections.sort(matchedDances);
+                StringJoiner sj = new StringJoiner(", ");
+                matchedDances.stream().forEach(sj::add);
+                danceField.setText(sj.toString());
+            }
+
             for (Map.Entry<FilePropertyType, TextInputControl> entry : propertyEditors.entrySet()) {
                 FilePropertyType propertyType = entry.getKey();
                 if (isModified(propertyType)) {
@@ -90,6 +112,8 @@ public class FilePropertiesPane extends GridPane {
                     setModified(propertyType, false);
                 }
             }
+
+            controller.saveSource(year, source);
         });
 
         Button reset = new Button("Reset");
@@ -100,7 +124,9 @@ public class FilePropertiesPane extends GridPane {
             }
         });
 
-        this.add(new HBox(10, applyChanges, reset), 1, 5);
+        HBox bottomRow = new HBox(10, new CheckBox("Rename file"), applyChanges, reset);
+        bottomRow.setAlignment(Pos.BASELINE_RIGHT);
+        this.add(bottomRow, 1, 5);
 
         checkedFiles.addListener((ListChangeListener<String>) change -> {
             commonValues.clear();
@@ -125,6 +151,67 @@ public class FilePropertiesPane extends GridPane {
             }
         });
 
+    }
+
+    private void validateDanceField(ObservableValue<? extends String> observable, String oldValue, String newValue) {
+        danceFieldValid = true;
+        StringBuilder message = new StringBuilder();
+
+        if (newValue != null && !newValue.trim().isEmpty()) {
+            String[] patterns = newValue.split(",");
+            for (String pattern : patterns) {
+                if (pattern.trim().isEmpty()) {
+                    continue;
+                }
+                ArrayList<String> matches = getMatchingDances(pattern);
+
+                if (matches.size() == 0) {
+                    danceFieldValid = false;
+                    message.append(String.format("Can't resolve entry [%s].", pattern.trim()));
+                } else if (matches.size() > 1) {
+                    danceFieldValid = false;
+                    StringJoiner sj = new StringJoiner(", ");
+                    matches.stream().forEach(sj::add);
+                    message.append(String.format("Ambiguous entry [%s] matches (%s).", pattern.trim(), sj.toString()));
+                }
+            }
+        }
+
+        if (!danceFieldValid) {
+            Tooltip tooltip = new Tooltip(message.toString());
+            System.out.println(message.toString());
+            danceField.setTooltip(tooltip);
+        } else {
+            danceField.setTooltip(null);
+        }
+    }
+
+    private ArrayList<String> getMatchingDances(String pattern) {
+        String familyName;
+        String styleName = null;
+        if (pattern.contains(">")) {
+            familyName = pattern.substring(0, pattern.indexOf('>')).trim();
+            styleName = pattern.substring(pattern.indexOf('>') + 1).trim();
+        } else {
+            familyName = pattern.trim();
+        }
+
+        ArrayList<String> matches = new ArrayList<>();
+        ObservableMap<String, DanceFamily> danceFamilies = controller.getDanceFamilies();
+        for (DanceFamily danceFamily : danceFamilies.values()) {
+            if (danceFamily.getName().toLowerCase().startsWith(familyName.toLowerCase())) {
+                if (styleName == null) {
+                    matches.add(danceFamily.getName());
+                } else {
+                    for (String style : danceFamily.getStyles()) {
+                        if (style.toLowerCase().startsWith(styleName.toLowerCase())) {
+                            matches.add(danceFamily.getName() + " > " + style);
+                        }
+                    }
+                }
+            }
+        }
+        return matches;
     }
 
     public void setSource(String year, String source) {
