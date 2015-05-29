@@ -75,7 +75,11 @@ public class ContextMenuCell extends TreeCell<SortedItem> {
             yearPrompt.initModality(Modality.APPLICATION_MODAL);
             yearPrompt.show();
         });
-        return new ContextMenu(menuAddYearItem);
+        MenuItem menuRebuildIndex = new MenuItem("Rebuild search index");
+        menuRebuildIndex.setOnAction(event -> {
+            controller.reindex();
+        });
+        return new ContextMenu(menuAddYearItem, menuRebuildIndex);
     }
 
     private ContextMenu createYearContextMenu() {

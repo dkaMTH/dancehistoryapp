@@ -5,6 +5,9 @@ import javafx.collections.ObservableList;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 
+import java.util.Collection;
+import java.util.Iterator;
+
 /**
  * Created by Dasha on 5/10/2015.
  */
@@ -34,14 +37,49 @@ public class SortedTreeView extends TreeView<SortedItem> {
             for (String year : years) {
                 children.add(new YearTreeItem(new SortedItem(year, SortedItemType.YEAR), controller));
             }
+            children.sort((o1, o2) -> o1.getValue().getName().compareTo(o2.getValue().getName()));
+
+            controller.foundFilesProperty().addListener((observable, oldValue, newValue) -> {
+                Collection<String> newYears;
+                if (newValue == null) {
+                    newYears = controller.getYears();
+                } else {
+                    newYears = newValue.keySet();
+                }
+
+                for (Iterator<TreeItem<SortedItem>> iterator = children.iterator(); iterator.hasNext(); ) {
+                    TreeItem<SortedItem> child = iterator.next();
+                    if (!newYears.contains(child.getValue().getName())) {
+                        iterator.remove();
+                    } else {
+                        ((YearTreeItem) child).filterChildren(newValue);
+                    }
+                }
+
+                outer:
+                for (String yearName : newYears) {
+                    for (TreeItem<SortedItem> child : children) {
+                        if (yearName.equals(child.getValue().getName())) {
+                            continue outer;
+                        }
+                    }
+                    YearTreeItem newItem = new YearTreeItem(new SortedItem(yearName, SortedItemType.YEAR), controller);
+                    newItem.filterChildren(newValue);
+                    children.add(newItem);
+                }
+
+                children.sort((o1, o2) -> o1.getValue().getName().compareTo(o2.getValue().getName()));
+            });
 
             years.addListener((ListChangeListener<String>) c -> {
                 while (c.next()) {
                     for (String newYear : c.getAddedSubList()) {
-                        TreeItem<SortedItem> item = new YearTreeItem(new SortedItem(newYear, SortedItemType.YEAR), controller);
+                        YearTreeItem item = new YearTreeItem(new SortedItem(newYear, SortedItemType.YEAR), controller);
                         children.add(item);
                     }
                 }
+
+                children.sort((o1, o2) -> o1.getValue().getName().compareTo(o2.getValue().getName()));
             });
         }
 

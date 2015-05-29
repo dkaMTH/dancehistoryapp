@@ -2,8 +2,26 @@ package com.intotheballroom;
 
 import com.sun.javafx.collections.ObservableListWrapper;
 import com.sun.javafx.collections.ObservableMapWrapper;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.*;
+import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.util.Version;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -22,21 +40,26 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class DocumentsController {
     private final File sortedRoot;
     private final File unsortedRoot;
+    private final IndexWriter indexWriter;
     private ObservableList<String> years;
     private ObservableMap<String, DanceFamily> danceFamilies;
     private Map<String, ObservableList<String>> yearSourceMap;
     private Map<String, Map<String, ObservableList<FileDescription>>> sourceFileMap;
+    private final StringProperty filterTextProperty = new SimpleStringProperty();
+    private final SearcherManager searcherManager;
 
-    public DocumentsController(File sortedRoot, File unsortedRoot) {
+    private ObjectProperty<Map<String, Map<String, Set<String>>>> foundFiles = new SimpleObjectProperty<>(null);
+
+    public DocumentsController(File sortedRoot, File unsortedRoot) throws IOException {
+        filterTextProperty.addListener(this::filterChanged);
+
         this.sortedRoot = sortedRoot;
         if (!sortedRoot.isDirectory() && !sortedRoot.mkdirs()) {
             throw new IllegalStateException(String.format("Unable to create directory %s", sortedRoot.getAbsolutePath()));
@@ -45,11 +68,78 @@ public class DocumentsController {
         danceFamilies = new ObservableMapWrapper<>(loadTree(new File(sortedRoot, "dances.xml")));
         //noinspection ConstantConditions
         years = new ObservableListWrapper<>(new ArrayList<>(
-                Arrays.stream(sortedRoot.listFiles()).filter(File::isDirectory).map(File::getName).collect(Collectors.toList())));
+                Arrays.stream(sortedRoot.listFiles()).filter(File::isDirectory).filter(file -> !file.getName().startsWith(".")).map(File::getName).collect(Collectors.toList()))).filtered(null);
         yearSourceMap = new HashMap<>();
         sourceFileMap = new HashMap<>();
 
         this.unsortedRoot = unsortedRoot;
+
+        Analyzer analyzer = new StandardAnalyzer(Version.LUCENE_40);
+        IndexWriterConfig iwc = new IndexWriterConfig(Version.LUCENE_40, analyzer);
+        iwc.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
+
+        indexWriter = new IndexWriter(FSDirectory.open(new File(sortedRoot, ".index")), iwc);
+
+        searcherManager = new SearcherManager(indexWriter, true, null);
+    }
+
+    public ObjectProperty<Map<String, Map<String, Set<String>>>> foundFilesProperty() {
+        return foundFiles;
+    }
+
+    private void filterChanged(ObservableValue<? extends String> observable, String oldValue, String newValue) {
+        IndexSearcher indexSearcher = null;
+        Map<String, Map<String, Set<String>>> foundFiles = null;
+        if (!newValue.trim().isEmpty()) {
+            try {
+                searcherManager.maybeRefreshBlocking();
+                indexSearcher = searcherManager.acquire();
+                MultiFieldQueryParser qp = new MultiFieldQueryParser(Version.LUCENE_40, new String[]{"name", "authors", "comment"}, new StandardAnalyzer(Version.LUCENE_40));
+                qp.setDefaultOperator(QueryParser.Operator.OR);
+                Query query = qp.parse(newValue);
+                BooleanQuery booleanQuery = new BooleanQuery();
+                booleanQuery.add(query, BooleanClause.Occur.MUST);
+                TopDocs docs = indexSearcher.search(booleanQuery, 1000000);
+                foundFiles = new HashMap<>();
+                for (ScoreDoc scoreDoc : docs.scoreDocs) {
+                    org.apache.lucene.document.Document doc = indexSearcher.doc(scoreDoc.doc);
+                    String path = doc.getField("path").stringValue();
+                    String[] split = path.split(Pattern.quote(File.separator));
+                    if (split.length == 3) {
+                        Map<String, Set<String>> visibleYear;
+                        if (foundFiles.containsKey(split[0])) {
+                            visibleYear = foundFiles.get(split[0]);
+                        } else {
+                            visibleYear = new HashMap<>();
+                            foundFiles.put(split[0], visibleYear);
+                        }
+
+                        Set<String> visibleSource;
+                        if (visibleYear.containsKey(split[1])) {
+                            visibleSource = visibleYear.get(split[1]);
+                        } else {
+                            visibleSource = new HashSet<>();
+                            visibleYear.put(split[1], visibleSource);
+                        }
+
+                        visibleSource.add(split[2]);
+                    }
+                }
+
+            } catch (IOException | ParseException e) {
+                e.printStackTrace();
+            } finally {
+                if (indexSearcher != null) {
+                    try {
+                        searcherManager.release(indexSearcher);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        this.foundFiles.setValue(foundFiles);
     }
 
     private Map<String, DanceFamily> loadTree(File file) {
@@ -110,10 +200,6 @@ public class DocumentsController {
         return succeeded;
     }
 
-    public File getSortedRoot() {
-        return sortedRoot;
-    }
-
     public File getUnsortedRoot() {
         return unsortedRoot;
     }
@@ -151,9 +237,53 @@ public class DocumentsController {
                 System.err.printf("Failed to retrieve files from source [%s] and year [%s]%n", source, year);
                 return null;
             }
+            File descriptionFile = new File(sortedRoot, year + File.separator + source + File.separator + "description.xml");
+            Map<String, FileDescription> availableDescriptions = new HashMap<>();
+            if (descriptionFile.isFile()) {
+                DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+                try {
+                    DocumentBuilder documentBuilder = dbf.newDocumentBuilder();
+                    Document document = documentBuilder.parse(descriptionFile);
+                    Element documentElement = document.getDocumentElement();
+                    NodeList availableFiles = documentElement.getChildNodes();
+                    int availableFilesLength = availableFiles.getLength();
+                    for (int i = 0; i < availableFilesLength; i++) {
+                        Node availableFile = availableFiles.item(i);
+                        if (availableFile.getNodeType() != Node.ELEMENT_NODE ||
+                                !availableFile.getNodeName().equals("file")) {
+                            continue;
+                        }
+                        String fileName = availableFile.getAttributes().getNamedItem("name").getNodeValue();
+                        FileDescription availableDescription = new FileDescription(fileName);
+
+                        NodeList filePropertyNodes = availableFile.getChildNodes();
+                        int filePropertyNodesLength = filePropertyNodes.getLength();
+                        for (int j = 0; j < filePropertyNodesLength; j++) {
+                            Node filePropertyNode = filePropertyNodes.item(j);
+                            if (filePropertyNode.getNodeType() != Node.ELEMENT_NODE ||
+                                    !filePropertyNode.getNodeName().equals("property")) {
+                                continue;
+                            }
+                            String type = filePropertyNode.getAttributes().getNamedItem("type").getNodeValue();
+                            availableDescription.setProperty(FilePropertyType.valueOf(type.toUpperCase()), filePropertyNode.getTextContent());
+                        }
+
+                        availableDescriptions.put(availableDescription.getName(), availableDescription);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+            }
             ArrayList<FileDescription> descriptions = new ArrayList<>();
             for (String fileName : list) {
-                descriptions.add(new FileDescription(fileName));
+                if (fileName.equals("description.xml"))
+                    continue;
+                if (availableDescriptions.containsKey(fileName)) {
+                    descriptions.add(availableDescriptions.get(fileName));
+                } else {
+                    descriptions.add(new FileDescription(fileName));
+                }
             }
             result = new ObservableListWrapper<>(descriptions);
             sources.put(source, result);
@@ -246,5 +376,47 @@ public class DocumentsController {
             return false;
         }
         return true;
+    }
+
+    public void reindex() {
+        try {
+            indexWriter.deleteAll();
+
+            for (Map.Entry<String, ObservableList<String>> yearEntry : yearSourceMap.entrySet()) {
+                for (String source : yearEntry.getValue()) {
+                    ObservableList<FileDescription> files = getSourceFiles(yearEntry.getKey(), source);
+                    for (FileDescription file : files) {
+                        org.apache.lucene.document.Document document = new org.apache.lucene.document.Document();
+                        document.add(new StringField("path", yearEntry.getKey() + File.separator + source + File.separator + file.getName(), Field.Store.YES));
+                        if (file.getAvailableProperties().contains(FilePropertyType.COMMENT)) {
+                            document.add(new TextField("comment", file.getProperty(FilePropertyType.COMMENT), Field.Store.NO));
+                        }
+                        if (file.getAvailableProperties().contains(FilePropertyType.PAGENAME)) {
+                            document.add(new TextField("name", file.getProperty(FilePropertyType.PAGENAME), Field.Store.NO));
+                        }
+
+                        if (file.getAvailableProperties().contains(FilePropertyType.PAGEAUTHORS)) {
+                            document.add(new TextField("authors", file.getProperty(FilePropertyType.PAGEAUTHORS), Field.Store.NO));
+                        }
+                        if (file.getAvailableProperties().contains(FilePropertyType.DANCES)) {
+                            String[] dances = file.getProperty(FilePropertyType.DANCES).split(",");
+                            for (String dance : dances) {
+                                document.add(new StringField("dance", dance, Field.Store.NO));
+                            }
+                        }
+                        indexWriter.addDocument(document);
+                    }
+                }
+            }
+
+            indexWriter.commit();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public StringProperty filterTextProperty() {
+        return filterTextProperty;
     }
 }

@@ -3,6 +3,7 @@ package com.intotheballroom;
 import javafx.collections.ObservableMap;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.control.cell.CheckBoxTreeCell;
 
 /**
  * Created by Dasha on 5/24/2015.
@@ -11,6 +12,7 @@ public class DancesTreeView extends TreeView<String> {
 
     public DancesTreeView(DocumentsController controller) {
         setShowRoot(false);
+        setCellFactory(CheckBoxTreeCell.forTreeView());
         TreeItem<String> rootItem = new TreeItem<>();
 
         ObservableMap<String, DanceFamily> danceFamilies = controller.getDanceFamilies();

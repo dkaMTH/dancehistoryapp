@@ -4,7 +4,9 @@ import javafx.application.Application;
 import javafx.geometry.Orientation;
 import javafx.scene.Scene;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.awt.*;
@@ -48,7 +50,9 @@ public class DanceApp extends Application {
         middle.getChildren().add(sourcePane);
 
         StackPane right = new StackPane();
-        right.getChildren().add(new DancesTreeView(controller));
+        TextField textField = new TextField();
+        controller.filterTextProperty().bind(textField.textProperty());
+        right.getChildren().add(new VBox(textField, new DancesTreeView(controller)));
 
         root.getItems().addAll(left, middle, right);
         root.setDividerPositions(0.2f, 0.8f);
