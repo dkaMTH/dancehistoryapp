@@ -19,6 +19,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Created by Dasha on 5/17/2015.
@@ -32,9 +34,13 @@ public class SourceFileListView extends ListView<String> {
     private final ListChangeListener<FileDescription> listener;
     private final HashMap<String, SimpleBooleanProperty> checkBoxItems = new HashMap<>();
     private final BatchObservableList<String> checkedFiles = new BatchObservableList<>(new ArrayList<>());
+    private final BatchObservableList<String> selectedFiles = new BatchObservableList<>(new ArrayList<>());
 
     public SourceFileListView(DocumentsController controller) {
         getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        getSelectionModel().getSelectedItems().addListener((ListChangeListener<String>) c -> updateSelection());
+        checkedFiles.addListener((ListChangeListener<String>) c -> updateSelection());
+        setEditable(true);
         setCellFactory(CheckBoxListCell.forListView(new Callback<String, ObservableValue<Boolean>>() {
             @Override
             public ObservableValue<Boolean> call(String param) {
@@ -98,6 +104,9 @@ public class SourceFileListView extends ListView<String> {
                     checkBoxItems.get(selectedItem).setValue(newValue);
                 }
                 checkedFiles.endBatchChange();
+            } else if (event.getCode() == KeyCode.F2) {
+                event.consume();
+                edit(getSelectionModel().getSelectedIndex());
             }
         });
 
@@ -112,10 +121,27 @@ public class SourceFileListView extends ListView<String> {
             }
             event.consume();
         });
+
+        controller.foundFilesProperty().addListener(SourceFileListView.this::foundFilesChanged);
     }
 
-    public ObservableList<String> getCheckedFiles() {
-        return checkedFiles;
+    private void updateSelection() {
+        selectedFiles.beginBatchChange();
+        selectedFiles.clear();
+        if (checkedFiles.isEmpty()) {
+            selectedFiles.addAll(getSelectionModel().getSelectedItems());
+        } else {
+            selectedFiles.addAll(checkedFiles);
+        }
+        selectedFiles.endBatchChange();
+    }
+
+    private void foundFilesChanged(ObservableValue<? extends Map<String, Map<String, Set<String>>>> observable, Map<String, Map<String, Set<String>>> oldValue, Map<String, Map<String, Set<String>>> newValue) {
+        setSource(this.year, this.source);
+    }
+
+    public ObservableList<String> getSelectedFiles() {
+        return selectedFiles;
     }
 
     private SimpleBooleanProperty createCheckedItemSelectionProperty(String fileName) {
@@ -154,12 +180,21 @@ public class SourceFileListView extends ListView<String> {
             ObservableList<FileDescription> sourceFiles = controller.getSourceFiles(year, source);
             sourceFiles.addListener(listener);
             ObservableList<String> items = getItems();
+            Map<String, Map<String, Set<String>>> foundFiles = controller.foundFilesProperty().getValue();
+            Set<String> files = null;
+            if (foundFiles != null && foundFiles.containsKey(year)) {
+                Map<String, Set<String>> yearData = foundFiles.get(year);
+                if (yearData != null && yearData.containsKey(source)) {
+                    files = yearData.get(source);
+                }
+            }
             for (FileDescription sourceFile : sourceFiles) {
-                items.add(sourceFile.getName());
-                checkBoxItems.put(sourceFile.getName(), createCheckedItemSelectionProperty(sourceFile.getName()));
+                if (files == null || files.contains(sourceFile.getName())) {
+                    items.add(sourceFile.getName());
+                    checkBoxItems.put(sourceFile.getName(), createCheckedItemSelectionProperty(sourceFile.getName()));
+                }
             }
         }
-
     }
 }
 

@@ -30,7 +30,7 @@ public class FilePropertiesPane extends GridPane {
     private final TextField danceField;
     private boolean danceFieldValid = true;
 
-    public FilePropertiesPane(DocumentsController controller, ObservableList<String> checkedFiles) {
+    public FilePropertiesPane(DocumentsController controller, ObservableList<String> selectedFiles) {
         this.controller = controller;
         this.add(new Label("Page name:"), 0, 0);
         TextField pageName = new TextField();
@@ -105,7 +105,7 @@ public class FilePropertiesPane extends GridPane {
                 FilePropertyType propertyType = entry.getKey();
                 if (isModified(propertyType)) {
                     String value = entry.getValue().getText();
-                    for (String checkedFile : checkedFiles) {
+                    for (String checkedFile : selectedFiles) {
                         controller.setFileProperty(year, source, checkedFile, propertyType, value);
                     }
                     commonValues.put(propertyType, value);
@@ -128,9 +128,10 @@ public class FilePropertiesPane extends GridPane {
         bottomRow.setAlignment(Pos.BASELINE_RIGHT);
         this.add(bottomRow, 1, 5);
 
-        checkedFiles.addListener((ListChangeListener<String>) change -> {
+        selectedFiles.addListener((ListChangeListener<String>) change -> {
             commonValues.clear();
-            for (String checkedFile : checkedFiles) {
+
+            for (String checkedFile : selectedFiles) {
                 FileDescription description = controller.getFileDescription(this.year, source, checkedFile);
                 for (FilePropertyType type : EnumSet.allOf(FilePropertyType.class)) {
                     String fileValue = description.getProperty(type);

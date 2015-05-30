@@ -66,10 +66,10 @@ public class YearTreeItem extends TreeItem<SortedItem> {
             return;
 
         Collection<String> sources;
-        if (visibleChildren == null) {
+        if (this.visibleChildren == null) {
             sources = controller.getSources(getValue().getName());
         } else {
-            sources = visibleChildren.keySet();
+            sources = this.visibleChildren.keySet();
         }
 
         for (Iterator<TreeItem<SortedItem>> iterator = getChildren().iterator(); iterator.hasNext(); ) {

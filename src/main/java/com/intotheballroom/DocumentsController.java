@@ -16,6 +16,7 @@ import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
@@ -56,6 +57,7 @@ public class DocumentsController {
     private final SearcherManager searcherManager;
 
     private ObjectProperty<Map<String, Map<String, Set<String>>>> foundFiles = new SimpleObjectProperty<>(null);
+    private List<String> danceFilter;
 
     public DocumentsController(File sortedRoot, File unsortedRoot) throws IOException {
         filterTextProperty.addListener(this::filterChanged);
@@ -88,58 +90,7 @@ public class DocumentsController {
     }
 
     private void filterChanged(ObservableValue<? extends String> observable, String oldValue, String newValue) {
-        IndexSearcher indexSearcher = null;
-        Map<String, Map<String, Set<String>>> foundFiles = null;
-        if (!newValue.trim().isEmpty()) {
-            try {
-                searcherManager.maybeRefreshBlocking();
-                indexSearcher = searcherManager.acquire();
-                MultiFieldQueryParser qp = new MultiFieldQueryParser(Version.LUCENE_40, new String[]{"name", "authors", "comment"}, new StandardAnalyzer(Version.LUCENE_40));
-                qp.setDefaultOperator(QueryParser.Operator.OR);
-                Query query = qp.parse(newValue);
-                BooleanQuery booleanQuery = new BooleanQuery();
-                booleanQuery.add(query, BooleanClause.Occur.MUST);
-                TopDocs docs = indexSearcher.search(booleanQuery, 1000000);
-                foundFiles = new HashMap<>();
-                for (ScoreDoc scoreDoc : docs.scoreDocs) {
-                    org.apache.lucene.document.Document doc = indexSearcher.doc(scoreDoc.doc);
-                    String path = doc.getField("path").stringValue();
-                    String[] split = path.split(Pattern.quote(File.separator));
-                    if (split.length == 3) {
-                        Map<String, Set<String>> visibleYear;
-                        if (foundFiles.containsKey(split[0])) {
-                            visibleYear = foundFiles.get(split[0]);
-                        } else {
-                            visibleYear = new HashMap<>();
-                            foundFiles.put(split[0], visibleYear);
-                        }
-
-                        Set<String> visibleSource;
-                        if (visibleYear.containsKey(split[1])) {
-                            visibleSource = visibleYear.get(split[1]);
-                        } else {
-                            visibleSource = new HashSet<>();
-                            visibleYear.put(split[1], visibleSource);
-                        }
-
-                        visibleSource.add(split[2]);
-                    }
-                }
-
-            } catch (IOException | ParseException e) {
-                e.printStackTrace();
-            } finally {
-                if (indexSearcher != null) {
-                    try {
-                        searcherManager.release(indexSearcher);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        this.foundFiles.setValue(foundFiles);
+        updateVisibleItems();
     }
 
     private Map<String, DanceFamily> loadTree(File file) {
@@ -332,6 +283,8 @@ public class DocumentsController {
             Element files = document.createElement("files");
             document.appendChild(files);
             for (FileDescription sourceFile : sourceFiles) {
+                org.apache.lucene.document.Document fileDocument = createDocument(year, source, sourceFile);
+                indexWriter.updateDocument(new Term("path", fileDocument.get("path")), fileDocument);
                 if (sourceFile.getAvailableProperties().isEmpty())
                     continue;
                 Element file = document.createElement("file");
@@ -386,24 +339,7 @@ public class DocumentsController {
                 for (String source : yearEntry.getValue()) {
                     ObservableList<FileDescription> files = getSourceFiles(yearEntry.getKey(), source);
                     for (FileDescription file : files) {
-                        org.apache.lucene.document.Document document = new org.apache.lucene.document.Document();
-                        document.add(new StringField("path", yearEntry.getKey() + File.separator + source + File.separator + file.getName(), Field.Store.YES));
-                        if (file.getAvailableProperties().contains(FilePropertyType.COMMENT)) {
-                            document.add(new TextField("comment", file.getProperty(FilePropertyType.COMMENT), Field.Store.NO));
-                        }
-                        if (file.getAvailableProperties().contains(FilePropertyType.PAGENAME)) {
-                            document.add(new TextField("name", file.getProperty(FilePropertyType.PAGENAME), Field.Store.NO));
-                        }
-
-                        if (file.getAvailableProperties().contains(FilePropertyType.PAGEAUTHORS)) {
-                            document.add(new TextField("authors", file.getProperty(FilePropertyType.PAGEAUTHORS), Field.Store.NO));
-                        }
-                        if (file.getAvailableProperties().contains(FilePropertyType.DANCES)) {
-                            String[] dances = file.getProperty(FilePropertyType.DANCES).split(",");
-                            for (String dance : dances) {
-                                document.add(new StringField("dance", dance, Field.Store.NO));
-                            }
-                        }
+                        org.apache.lucene.document.Document document = createDocument(yearEntry.getKey(), source, file);
                         indexWriter.addDocument(document);
                     }
                 }
@@ -416,7 +352,99 @@ public class DocumentsController {
         }
     }
 
+    private org.apache.lucene.document.Document createDocument(String year, String source, FileDescription file) {
+        org.apache.lucene.document.Document document = new org.apache.lucene.document.Document();
+        document.add(new StringField("path", year + File.separator + source + File.separator + file.getName(), Field.Store.YES));
+        if (file.getAvailableProperties().contains(FilePropertyType.COMMENT)) {
+            document.add(new TextField("comment", file.getProperty(FilePropertyType.COMMENT), Field.Store.NO));
+        }
+        if (file.getAvailableProperties().contains(FilePropertyType.PAGENAME)) {
+            document.add(new TextField("name", file.getProperty(FilePropertyType.PAGENAME), Field.Store.NO));
+        }
+
+        if (file.getAvailableProperties().contains(FilePropertyType.PAGEAUTHORS)) {
+            document.add(new TextField("authors", file.getProperty(FilePropertyType.PAGEAUTHORS), Field.Store.NO));
+        }
+        if (file.getAvailableProperties().contains(FilePropertyType.DANCES)) {
+            String[] dances = file.getProperty(FilePropertyType.DANCES).split(",");
+            for (String dance : dances) {
+                document.add(new StringField("dance", dance.trim(), Field.Store.NO));
+            }
+        }
+        return document;
+    }
+
     public StringProperty filterTextProperty() {
         return filterTextProperty;
+    }
+
+    public void setDanceFilter(List<String> dances) {
+        this.danceFilter = dances;
+
+        updateVisibleItems();
+    }
+
+    private void updateVisibleItems() {
+        String newValue = filterTextProperty.getValue().trim();
+        IndexSearcher indexSearcher = null;
+        Map<String, Map<String, Set<String>>> foundFiles = null;
+        if (!newValue.isEmpty() || danceFilter != null) {
+            try {
+                searcherManager.maybeRefreshBlocking();
+                indexSearcher = searcherManager.acquire();
+                BooleanQuery booleanQuery = new BooleanQuery();
+                if (!newValue.isEmpty()) {
+                    MultiFieldQueryParser qp = new MultiFieldQueryParser(Version.LUCENE_40, new String[]{"name", "authors", "comment"}, new StandardAnalyzer(Version.LUCENE_40));
+                    qp.setDefaultOperator(QueryParser.Operator.OR);
+                    Query query = qp.parse(newValue);
+                    booleanQuery.add(query, BooleanClause.Occur.MUST);
+                }
+                if (danceFilter != null) {
+                    BooleanQuery dancesQuery = new BooleanQuery();
+                    booleanQuery.add(dancesQuery, BooleanClause.Occur.MUST);
+                    for (String dance : danceFilter) {
+                        dancesQuery.add(new TermQuery(new Term("dance", dance)), BooleanClause.Occur.SHOULD);
+                    }
+                }
+                TopDocs docs = indexSearcher.search(booleanQuery, 1000000);
+                foundFiles = new HashMap<>();
+                for (ScoreDoc scoreDoc : docs.scoreDocs) {
+                    org.apache.lucene.document.Document doc = indexSearcher.doc(scoreDoc.doc);
+                    String path = doc.getField("path").stringValue();
+                    String[] split = path.split(Pattern.quote(File.separator));
+                    if (split.length == 3) {
+                        Map<String, Set<String>> visibleYear;
+                        if (foundFiles.containsKey(split[0])) {
+                            visibleYear = foundFiles.get(split[0]);
+                        } else {
+                            visibleYear = new HashMap<>();
+                            foundFiles.put(split[0], visibleYear);
+                        }
+
+                        Set<String> visibleSource;
+                        if (visibleYear.containsKey(split[1])) {
+                            visibleSource = visibleYear.get(split[1]);
+                        } else {
+                            visibleSource = new HashSet<>();
+                            visibleYear.put(split[1], visibleSource);
+                        }
+
+                        visibleSource.add(split[2]);
+                    }
+                }
+            } catch (IOException | ParseException e) {
+                e.printStackTrace();
+            } finally {
+                if (indexSearcher != null) {
+                    try {
+                        searcherManager.release(indexSearcher);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        this.foundFiles.setValue(foundFiles);
     }
 }

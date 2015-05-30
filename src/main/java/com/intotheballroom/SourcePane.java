@@ -37,7 +37,7 @@ public class SourcePane extends VBox {
         VBox.setVgrow(fileList, Priority.ALWAYS);
         children.add(fileList);
 
-        filePropertiesPane = new FilePropertiesPane(controller, fileList.getCheckedFiles());
+        filePropertiesPane = new FilePropertiesPane(controller, fileList.getSelectedFiles());
         GridPane fileProperties = initGridPane(filePropertiesPane);
         children.add(fileProperties);
 
