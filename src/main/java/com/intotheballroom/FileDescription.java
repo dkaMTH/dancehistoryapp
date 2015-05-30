@@ -8,7 +8,7 @@ import java.util.Set;
  * Created by Dasha on 5/23/2015.
  */
 public class FileDescription {
-    private final String name;
+    private String name;
     private final Map<FilePropertyType, String> properties = new EnumMap<>(FilePropertyType.class);
 
     public FileDescription(String name) {
@@ -29,5 +29,9 @@ public class FileDescription {
 
     public void setProperty(FilePropertyType type, String value) {
         properties.put(type, value);
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 }

@@ -17,10 +17,7 @@ import javafx.util.Callback;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Created by Dasha on 5/17/2015.
@@ -52,11 +49,16 @@ public class SourceFileListView extends ListView<String> {
 
         listener = c -> {
             while (c.next()) {
+                for (FileDescription description : c.getRemoved()) {
+                    getItems().remove(description.getName());
+                    checkBoxItems.remove(description.getName());
+                }
                 for (FileDescription description : c.getAddedSubList()) {
                     getItems().add(description.getName());
                     checkBoxItems.put(description.getName(), createCheckedItemSelectionProperty(description.getName()));
                 }
             }
+            getItems().sort(Comparator.<String>naturalOrder());
         };
 
 
@@ -194,6 +196,7 @@ public class SourceFileListView extends ListView<String> {
                     checkBoxItems.put(sourceFile.getName(), createCheckedItemSelectionProperty(sourceFile.getName()));
                 }
             }
+            getItems().sort(Comparator.<String>naturalOrder());
         }
     }
 }

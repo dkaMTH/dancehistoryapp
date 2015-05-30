@@ -355,21 +355,33 @@ public class DocumentsController {
     private org.apache.lucene.document.Document createDocument(String year, String source, FileDescription file) {
         org.apache.lucene.document.Document document = new org.apache.lucene.document.Document();
         document.add(new StringField("path", year + File.separator + source + File.separator + file.getName(), Field.Store.YES));
-        if (file.getAvailableProperties().contains(FilePropertyType.COMMENT)) {
+        Set<FilePropertyType> availableProperties = file.getAvailableProperties();
+        if (availableProperties.contains(FilePropertyType.COMMENT)) {
             document.add(new TextField("comment", file.getProperty(FilePropertyType.COMMENT), Field.Store.NO));
         }
-        if (file.getAvailableProperties().contains(FilePropertyType.PAGENAME)) {
+        if (availableProperties.contains(FilePropertyType.PAGENAME)) {
             document.add(new TextField("name", file.getProperty(FilePropertyType.PAGENAME), Field.Store.NO));
         }
 
-        if (file.getAvailableProperties().contains(FilePropertyType.PAGEAUTHORS)) {
+        if (availableProperties.contains(FilePropertyType.PAGEAUTHORS)) {
             document.add(new TextField("authors", file.getProperty(FilePropertyType.PAGEAUTHORS), Field.Store.NO));
         }
-        if (file.getAvailableProperties().contains(FilePropertyType.DANCES)) {
+        if (availableProperties.contains(FilePropertyType.DANCES)) {
             String[] dances = file.getProperty(FilePropertyType.DANCES).split(",");
             for (String dance : dances) {
                 document.add(new StringField("dance", dance.trim(), Field.Store.NO));
             }
+        }
+        if (availableProperties.contains(FilePropertyType.YEAR)) {
+            String yearProperty = file.getProperty(FilePropertyType.YEAR);
+            String monthProperty = file.getProperty(FilePropertyType.MONTH);
+            String dayProperty = file.getProperty(FilePropertyType.DAY);
+            int yearValue = Integer.parseInt(yearProperty == null ? "0" : yearProperty.trim());
+            int monthValue = Integer.parseInt(monthProperty == null ? "0" : monthProperty.trim());
+            int dayValue = Integer.parseInt(dayProperty == null ? "0" : dayProperty.trim());
+            String date = String.format("%04d%02d%02d", yearValue, monthValue, dayValue);
+            document.add(new StringField("date", date, Field.Store.NO));
+            System.out.println(date);
         }
         return document;
     }
@@ -432,8 +444,9 @@ public class DocumentsController {
                         visibleSource.add(split[2]);
                     }
                 }
-            } catch (IOException | ParseException e) {
+            } catch (IOException e) {
                 e.printStackTrace();
+            } catch (ParseException e) {
             } finally {
                 if (indexSearcher != null) {
                     try {
@@ -446,5 +459,36 @@ public class DocumentsController {
         }
 
         this.foundFiles.setValue(foundFiles);
+    }
+
+    public void renameFile(String year, String source, String oldName, String newName) {
+        ObservableList<FileDescription> sourceFiles = getSourceFiles(year, source);
+
+        String extension = "";
+        if (oldName.indexOf('.') != -1) {
+            extension = oldName.substring(oldName.indexOf('.'));
+        }
+        if (!newName.endsWith(extension)) {
+            newName += extension;
+        }
+
+        File oldFile = new File(sortedRoot, year + File.separator + source + File.separator + oldName);
+        File newFile = new File(sortedRoot, year + File.separator + source + File.separator + newName);
+        if (newFile.isFile() || !oldFile.renameTo(newFile)) {
+            return;
+        }
+
+        FileDescription sourceFile = null;
+        for (Iterator<FileDescription> iterator = sourceFiles.iterator(); iterator.hasNext(); ) {
+            sourceFile = iterator.next();
+            if (sourceFile.getName().equals(oldName)) {
+                iterator.remove();
+                break;
+            }
+        }
+        if (sourceFile != null) {
+            sourceFile.setName(newName);
+            sourceFiles.add(sourceFile);
+        }
     }
 }

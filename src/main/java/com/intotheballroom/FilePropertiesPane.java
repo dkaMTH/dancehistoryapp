@@ -81,6 +81,7 @@ public class FilePropertiesPane extends GridPane {
         }
 
         Button applyChanges = new Button("Apply changes");
+        CheckBox renameCheckbox = new CheckBox("Rename file");
 
         applyChanges.setOnAction(event -> {
             if (isModified(FilePropertyType.DANCES)) {
@@ -113,6 +114,12 @@ public class FilePropertiesPane extends GridPane {
                 }
             }
 
+            if (renameCheckbox.isSelected() && !renameCheckbox.isDisable()) {
+                for (String selectedFile : selectedFiles) {
+                    controller.renameFile(year, source, selectedFile, pageName.getText());
+                }
+            }
+
             controller.saveSource(year, source);
         });
 
@@ -124,12 +131,14 @@ public class FilePropertiesPane extends GridPane {
             }
         });
 
-        HBox bottomRow = new HBox(10, new CheckBox("Rename file"), applyChanges, reset);
+        HBox bottomRow = new HBox(10, renameCheckbox, applyChanges, reset);
         bottomRow.setAlignment(Pos.BASELINE_RIGHT);
         this.add(bottomRow, 1, 5);
 
         selectedFiles.addListener((ListChangeListener<String>) change -> {
             commonValues.clear();
+
+            renameCheckbox.setDisable(selectedFiles.size() != 1);
 
             for (String checkedFile : selectedFiles) {
                 FileDescription description = controller.getFileDescription(this.year, source, checkedFile);
