@@ -28,6 +28,16 @@ public class DancesTreeView extends TreeView<String> {
         this.controller = controller;
         setShowRoot(false);
         TreeItem<String> rootItem = new TreeItem<>();
+        MenuItem addFamilyItem = new MenuItem("Add family");
+        addFamilyItem.setOnAction(
+                event -> new ModalDialog("Add family", "Family name", "name", familyName -> {
+                    if (!controller.getDanceFamilies().containsKey(familyName)) {
+                        controller.getDanceFamilies().put(familyName, new DanceFamily(familyName));
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }, null).show());
         setCellFactory(new CheckedContextMenuTreeCellFactory(new Callback<TreeItem<String>, ObservableValue<Boolean>>() {
             @Override
             public ObservableValue<Boolean> call(TreeItem<String> param) {
@@ -44,16 +54,7 @@ public class DancesTreeView extends TreeView<String> {
                 return null;
 
             if (param.getParent() == rootItem) {
-                MenuItem addFamilyItem = new MenuItem("Add family");
-                addFamilyItem.setOnAction(
-                        event -> new ModalDialog("Add family", "Family name", "name", familyName -> {
-                            if (!controller.getDanceFamilies().containsKey(familyName)) {
-                                controller.getDanceFamilies().put(familyName, new DanceFamily(familyName));
-                                return true;
-                            } else {
-                                return false;
-                            }
-                        }, null).show());
+
                 MenuItem deleteFamilyItem = new MenuItem("Delete family");
                 deleteFamilyItem.setOnAction(event -> controller.getDanceFamilies().remove(param.getValue()));
                 MenuItem addStyleItem = new MenuItem("Add style");
@@ -105,6 +106,7 @@ public class DancesTreeView extends TreeView<String> {
         });
 
         setRoot(rootItem);
+        setContextMenu(new ContextMenu(addFamilyItem));
     }
 
     private TreeItem<String> createFamiliesItem(DanceFamily danceFamily) {
