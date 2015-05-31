@@ -7,11 +7,14 @@ import javafx.scene.control.SplitPane;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.prefs.BackingStoreException;
+import java.util.prefs.Preferences;
 
 public class DanceApp extends Application {
     public static void main(String[] args) {
@@ -20,10 +23,27 @@ public class DanceApp extends Application {
     }
 
     @Override
-    public void start(Stage primaryStage) throws IOException {
+    public void start(Stage primaryStage) throws IOException, BackingStoreException {
+        DirectoryChooser chooser = new DirectoryChooser();
+        Preferences prefs = Preferences.userNodeForPackage(DanceApp.class);
+        String defaultDirectory = prefs.get("root", null);
+
+        if (defaultDirectory != null) {
+            chooser.setInitialDirectory(new File(defaultDirectory));
+        }
+        File directory = chooser.showDialog(primaryStage);
+
+        if (directory == null) {
+            System.exit(1);
+            return;
+        }
+
+        prefs.put("root", directory.getAbsolutePath());
+        prefs.flush();
+
         DocumentsController controller = new DocumentsController(
-                new File("Sorted"),
-                new File("Unsorted"));
+                new File(directory, "Sorted"),
+                new File(directory, "Unsorted"));
 
         primaryStage.setTitle("Dance app");
 

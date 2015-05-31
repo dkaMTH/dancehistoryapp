@@ -60,6 +60,9 @@ public class DocumentsController {
     private List<String> danceFilter;
 
     public DocumentsController(File sortedRoot, File unsortedRoot) throws IOException {
+        sortedRoot.mkdirs();
+        unsortedRoot.mkdirs();
+
         filterTextProperty.addListener(this::filterChanged);
 
         this.sortedRoot = sortedRoot;
@@ -67,7 +70,7 @@ public class DocumentsController {
             throw new IllegalStateException(String.format("Unable to create directory %s", sortedRoot.getAbsolutePath()));
         }
 
-        danceFamilies = new ObservableMapWrapper<>(loadTree(new File(sortedRoot, "dances.xml")));
+        danceFamilies = new ObservableMapWrapper<>(loadDanceTree(new File(sortedRoot, "dances.xml")));
         //noinspection ConstantConditions
         years = new ObservableListWrapper<>(new ArrayList<>(
                 Arrays.stream(sortedRoot.listFiles()).filter(File::isDirectory).filter(file -> !file.getName().startsWith(".")).map(File::getName).collect(Collectors.toList()))).filtered(null);
@@ -93,9 +96,9 @@ public class DocumentsController {
         updateVisibleItems();
     }
 
-    private Map<String, DanceFamily> loadTree(File file) {
+    private Map<String, DanceFamily> loadDanceTree(File file) {
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-        Map<String, DanceFamily> result = new HashMap<>();
+        Map<String, DanceFamily> result = new TreeMap<>();
         try {
             DocumentBuilder documentBuilder = dbf.newDocumentBuilder();
             Document document = documentBuilder.parse(file);
@@ -126,6 +129,7 @@ public class DocumentsController {
                                 continue;
                             danceFamily.getStyles().add(styleName);
                         }
+                        danceFamily.getStyles().sort(Comparator.<String>naturalOrder());
                     }
                 }
             }
@@ -298,20 +302,9 @@ public class DocumentsController {
                 files.appendChild(file);
             }
 
-
-            // Use a Transformer for output
-            TransformerFactory tFactory =
-                    TransformerFactory.newInstance();
-            Transformer transformer =
-                    tFactory.newTransformer();
-
-            DOMSource domSource = new DOMSource(document);
-            try (FileOutputStream outputStream = new FileOutputStream(new File(
-                    sortedRoot, year + File.separator + source + File.separator + "description.xml"))) {
-                StreamResult result = new StreamResult(outputStream);
-                transformer.transform(domSource, result);
-            }
-
+            File outputFile = new File(
+                    sortedRoot, year + File.separator + source + File.separator + "description.xml");
+            writeDocument(document, outputFile);
         } catch (ParserConfigurationException e) {
             e.printStackTrace();
             return false;
@@ -329,6 +322,20 @@ public class DocumentsController {
             return false;
         }
         return true;
+    }
+
+    private void writeDocument(Document document, File outputFile) throws IOException, TransformerException {
+        // Use a Transformer for output
+        TransformerFactory tFactory =
+                TransformerFactory.newInstance();
+        Transformer transformer =
+                tFactory.newTransformer();
+
+        DOMSource domSource = new DOMSource(document);
+        try (FileOutputStream outputStream = new FileOutputStream(outputFile)) {
+            StreamResult result = new StreamResult(outputStream);
+            transformer.transform(domSource, result);
+        }
     }
 
     public void reindex() {
@@ -489,6 +496,33 @@ public class DocumentsController {
         if (sourceFile != null) {
             sourceFile.setName(newName);
             sourceFiles.add(sourceFile);
+        }
+    }
+
+    public void saveDanceFamilies() {
+        File outputFile = new File(sortedRoot, "dances.xml");
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        try {
+            Document document = dbf.newDocumentBuilder().newDocument();
+            Element families = document.createElement("families");
+            document.appendChild(families);
+            for (DanceFamily family : danceFamilies.values()) {
+                Element familyNode = document.createElement("family");
+                familyNode.setAttribute("name", family.getName());
+                for (String style : family.getStyles()) {
+                    Element styleNode = document.createElement("style");
+                    styleNode.setAttribute("name", style);
+                    familyNode.appendChild(styleNode);
+                }
+                families.appendChild(familyNode);
+            }
+            writeDocument(document, outputFile);
+        } catch (ParserConfigurationException e) {
+            e.printStackTrace();
+        } catch (TransformerException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }
