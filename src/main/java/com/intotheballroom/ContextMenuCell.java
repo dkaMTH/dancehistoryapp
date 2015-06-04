@@ -84,8 +84,8 @@ public class ContextMenuCell extends TreeCell<SortedItem> {
 
     private ContextMenu createYearContextMenu() {
         String currentYear = getTreeItem().getValue().getName();
-        MenuItem menuDeleteYearItem = new MenuItem("Delete year"); //TODO: ACTION
-        MenuItem menuEditYearItem = new MenuItem("Edit year"); //TODO: ACTION
+//        MenuItem menuDeleteYearItem = new MenuItem("Delete year");
+//        MenuItem menuEditYearItem = new MenuItem("Edit year");
         MenuItem menuAddSourceItem = new MenuItem("Add Source");
 
         menuAddSourceItem.setOnAction((ActionEvent t) -> {
@@ -101,7 +101,7 @@ public class ContextMenuCell extends TreeCell<SortedItem> {
             root.add(new Label("Source (" + currentYear + "):"), 0, 0);
             TextField sourceTextField = new TextField();
             sourceTextField.setPromptText("Enter Source Title");
-            sourceTextField.setPrefWidth(200);
+            sourceTextField.setPrefWidth(180);
             root.add(sourceTextField, 1, 0);
 
             Button cancel = new Button("Cancel");
@@ -126,6 +126,8 @@ public class ContextMenuCell extends TreeCell<SortedItem> {
             sourcePrompt.show();
         });
 
-        return new ContextMenu(menuEditYearItem, menuDeleteYearItem, new SeparatorMenuItem(), menuAddSourceItem);
+//        return new ContextMenu(menuEditYearItem, menuDeleteYearItem, new SeparatorMenuItem(), menuAddSourceItem);
+        return new ContextMenu(menuAddSourceItem);
+
     }
 }

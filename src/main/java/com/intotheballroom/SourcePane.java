@@ -4,7 +4,6 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -26,11 +25,11 @@ public class SourcePane extends VBox {
         sourceProperties.add(new Label("Source:"), 0, 0);
         sourceName = new Label();
         sourceProperties.add(sourceName, 1, 0);
-        sourceProperties.add(new Label("Author(s):"), 0, 1);
-        TextField authorsField = new TextField();
-        authorsField.setPromptText("Use a comma to separate multiple authors");
-        authorsField.setPrefWidth(250);
-        sourceProperties.add(authorsField, 1, 1);
+//        sourceProperties.add(new Label("Author(s):"), 0, 1);
+//        TextField authorsField = new TextField();
+//        authorsField.setPromptText("Use a comma to separate multiple authors");
+//        authorsField.setPrefWidth(250);
+//        sourceProperties.add(authorsField, 1, 1);
         children.add(sourceProperties);
 
         fileList = new SourceFileListView(controller);

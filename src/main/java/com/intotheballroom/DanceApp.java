@@ -45,7 +45,7 @@ public class DanceApp extends Application {
                 new File(directory, "Sorted"),
                 new File(directory, "Unsorted"));
 
-        primaryStage.setTitle("Dance app");
+        primaryStage.setTitle("Dance History Organizer");
 
         SplitPane root = new SplitPane();
 
@@ -71,6 +71,7 @@ public class DanceApp extends Application {
 
         StackPane right = new StackPane();
         TextField textField = new TextField();
+        textField.setPromptText("Search");
         controller.filterTextProperty().bind(textField.textProperty());
         right.getChildren().add(new VBox(textField, new DancesTreeView(controller)));
 
